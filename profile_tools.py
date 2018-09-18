@@ -1,0 +1,96 @@
+
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+import numpy as np
+from os import listdir
+
+class Profiler:
+    def __init__(self, path, positive_control_column=1, experimental_column=2):
+        self.path = path
+        self.positive_control_column = positive_control_column
+        self.experimental_column = experimental_column
+        self.files = []
+        
+    def parse_filename(self, name):
+        tosplit = name.replace('.','_')
+        components = tosplit.split('_')
+        d = {
+            'full_name' : name,
+            'date' : components[0],
+            'condition' : components[1]+components[2],
+            'image_num' : components[3],
+            'profile_num' : components[6]
+        }
+        return d
+    
+    def load_files(self):
+        for file in listdir(self.path):
+            if file[-3:] == 'csv': self.files.append(self.parse_filename(file))
+
+    def load_trace(self, filepath):
+        return np.loadtxt(filepath, delimiter=',',skiprows=1)
+
+    def min_x_trace(self, trace, x):
+        trace[:,1].sort()
+        return np.mean(trace[:x,1])
+
+    def max_trace(self, trace):
+        return np.max(trace[:,1])
+
+    def ratio_trace(self, trace, min_calc=min_x_trace, min_vals=5):
+        return max_trace(trace)/min_calc(trace,min_vals)
+
+    def remove_bkgd(self, trace):
+        m = trace.min(axis=0)
+        return trace-m
+
+    def anova(self, y, x, df):
+        mod_string = '{} ~ {}'.format(y,x)
+        mod = ols(mod_string,
+                        data=df).fit()
+
+        aov_table = sm.stats.anova_lm(mod, typ=2)
+        return aov_table
+
+    # First, caluculate all the background averages
+    def calculate_backgrounds(self):
+        backgrounds = {}
+        for file in self.files:
+            # find the average of each channel
+            trace = self.load_trace(self.path+file['full_name'])
+            slice1 = np.mean(trace[:,1])
+            slice2 = np.mean(trace[:,2])
+            slice3 = np.mean(trace[:,3])
+            backgrounds[file['condition']+file['image_num']] = (slice1, slice2, slice3) # this is still a bit dirty, but it works for now?
+        self.backgrounds = backgrounds
+
+    def parse_granules(self):
+        d = {'condition':[],
+        #    'values':[], # for debugging
+             'background':[],
+             'filename':[], # for debugging
+            'avg_min':[],
+            'max':[],
+            'ratio':[]}
+        for file in self.files:
+            bkgd = self.backgrounds[file['condition']+file['image_num']] # This is bad. Should have background info merged into file info?
+            d['background'].append(bkgd[1])
+            d['filename'].append(file)
+            d['condition'].append(file['condition'])
+            trace = self.load_trace(self.path+file['full_name'])
+            avg_min = np.mean(np.hstack([trace[:3,self.experimental_column],trace[-3:,self.experimental_column]])) - bkgd[self.experimental_column-1]
+            d['avg_min'].append(avg_min)
+            peak = self.max_range(trace[:,self.positive_control_column],5)
+            max_val = np.max(trace[peak,self.experimental_column]) - bkgd[self.experimental_column-1]
+            d['max'].append(max_val)
+            d['ratio'].append(max_val/avg_min)
+        self.df = pd.DataFrame(d)
+
+    def max_range(self, trace, width):
+        max_index = np.argmax(trace)
+        lower_bound = max_index-(width//2)
+        if lower_bound < 0: lower_bound = 0
+        upper_bound = lower_bound+width
+        if len(trace) <= upper_bound: upper_bound = len(trace)-1
+        return range(lower_bound, upper_bound)
