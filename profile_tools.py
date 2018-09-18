@@ -2,6 +2,7 @@
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
+import seaborn as sn
 import numpy as np
 from os import listdir
 
@@ -24,9 +25,9 @@ class Profiler:
         }
         return d
     
-    def load_files(self):
+    def load_files(self, parser=parse_filename):
         for file in listdir(self.path):
-            if file[-3:] == 'csv': self.files.append(self.parse_filename(file))
+            if file[-3:] == 'csv': self.files.append(parser(self,file))
 
     def load_trace(self, filepath):
         return np.loadtxt(filepath, delimiter=',',skiprows=1)
@@ -57,6 +58,8 @@ class Profiler:
     def calculate_backgrounds(self):
         backgrounds = {}
         for file in self.files:
+            if file['profile_num'] != '0':
+                continue
             # find the average of each channel
             trace = self.load_trace(self.path+file['full_name'])
             slice1 = np.mean(trace[:,1])
@@ -74,9 +77,10 @@ class Profiler:
             'max':[],
             'ratio':[]}
         for file in self.files:
+            if file['profile_num'] == '0': continue
             bkgd = self.backgrounds[file['condition']+file['image_num']] # This is bad. Should have background info merged into file info?
-            d['background'].append(bkgd[1])
-            d['filename'].append(file)
+            d['background'].append(bkgd[self.experimental_column-1])
+            d['filename'].append(file['full_name'])
             d['condition'].append(file['condition'])
             trace = self.load_trace(self.path+file['full_name'])
             avg_min = np.mean(np.hstack([trace[:3,self.experimental_column],trace[-3:,self.experimental_column]])) - bkgd[self.experimental_column-1]
@@ -86,6 +90,7 @@ class Profiler:
             d['max'].append(max_val)
             d['ratio'].append(max_val/avg_min)
         self.df = pd.DataFrame(d)
+        return self.df
 
     def max_range(self, trace, width):
         max_index = np.argmax(trace)
@@ -94,3 +99,14 @@ class Profiler:
         upper_bound = lower_bound+width
         if len(trace) <= upper_bound: upper_bound = len(trace)-1
         return range(lower_bound, upper_bound)
+    
+    def boxplot(self):
+        ax = sn.stripplot(data=self.df,y='ratio',x='condition',jitter=True)
+        return sn.boxplot(data=self.df,y='ratio',x='condition',ax=ax,color='w',fliersize=0)
+        
+    def anova(self):
+        mod_string = 'ratio ~ condition'
+        mod = ols(mod_string,
+                        data=self.df).fit()
+        aov_table = sm.stats.anova_lm(mod, typ=2)
+        return aov_table
