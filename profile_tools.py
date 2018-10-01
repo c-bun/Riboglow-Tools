@@ -35,15 +35,8 @@ class Profiler:
     def load_trace(self, filepath):
         return np.loadtxt(filepath, delimiter=',',skiprows=1)
 
-    def min_x_trace(self, trace, x):
-        trace[:,1].sort()
-        return np.mean(trace[:x,1])
-
-    def max_trace(self, trace):
-        return np.max(trace[:,1])
-
-    def ratio_trace(self, trace, min_calc=min_x_trace, min_vals=5):
-        return max_trace(trace)/min_calc(trace,min_vals)
+    def min_edges_trace(self, trace, n):
+        return np.mean(np.hstack([trace[:n,self.experimental_column],trace[-n:,self.experimental_column]]))
 
     def remove_bkgd(self, trace):
         m = trace.min(axis=0)
@@ -93,7 +86,8 @@ class Profiler:
             d['filename'].append(file['full_name'])
             d['condition'].append(file['condition'])
             trace = self.load_trace(self.path+file['full_name'])
-            avg_min = np.mean(np.hstack([trace[:3,self.experimental_column],trace[-3:,self.experimental_column]])) - bkgd[self.experimental_column-1]
+            avg_min = self.min_edges_trace(trace, 4) - bkgd[self.experimental_column-1]
+            if avg_min < 1: avg_min = 1 # To eliminate wierd behaviour when taking a ratio with a small number in the denominator
             d['avg_min'].append(avg_min)
             peak = self.max_range(trace[:,self.positive_control_column],5)
             max_val = np.max(trace[peak,self.experimental_column]) - bkgd[self.experimental_column-1]
