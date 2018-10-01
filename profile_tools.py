@@ -6,6 +6,9 @@ import seaborn as sn
 import numpy as np
 from os import listdir
 
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+from statsmodels.stats.multicomp import MultiComparison
+
 class Profiler:
     def __init__(self, path, positive_control_column=1, experimental_column=2):
         self.path = path
@@ -46,13 +49,20 @@ class Profiler:
         m = trace.min(axis=0)
         return trace-m
 
-    def anova(self, y, x, df):
+    def anova(self, y='ratio', x='condition', df=None):
+        if df is None: df = self.df
         mod_string = '{} ~ {}'.format(y,x)
         mod = ols(mod_string,
                         data=df).fit()
 
         aov_table = sm.stats.anova_lm(mod, typ=2)
         return aov_table
+
+    def tukey_hsd(self, y='ratio', x='condition', df=None):
+        if df is None: df = self.df
+        mc = MultiComparison(df[y], df[x])
+        result = mc.tukeyhsd()
+        return result.summary()
 
     # First, caluculate all the background averages
     def calculate_backgrounds(self):
@@ -103,10 +113,3 @@ class Profiler:
     def boxplot(self):
         ax = sn.stripplot(data=self.df,y='ratio',x='condition',jitter=True)
         return sn.boxplot(data=self.df,y='ratio',x='condition',ax=ax,color='w',fliersize=0)
-        
-    def anova(self):
-        mod_string = 'ratio ~ condition'
-        mod = ols(mod_string,
-                        data=self.df).fit()
-        aov_table = sm.stats.anova_lm(mod, typ=2)
-        return aov_table
