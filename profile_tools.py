@@ -10,11 +10,15 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multicomp import MultiComparison
 
 class Profiler:
-    def __init__(self, path, positive_control_column=1, experimental_column=2):
+    def __init__(self, path, positive_control_column=1, experimental_column=2, dfs=None):
         self.path = path
         self.positive_control_column = positive_control_column
         self.experimental_column = experimental_column
         self.files = []
+        if dfs is not None:
+            self.df = pd.concat(dfs,ignore_index=True)
+        else:
+            self.df = None
         
     def parse_filename(self, name):
         tosplit = name.replace('.','_')
@@ -73,6 +77,7 @@ class Profiler:
 
     def parse_granules(self):
         d = {'condition':[],
+             'date':[],
         #    'values':[], # for debugging
              'background':[],
              'filename':[], # for debugging
@@ -84,6 +89,7 @@ class Profiler:
             bkgd = self.backgrounds[file['condition']+file['image_num']] # This is bad. Should have background info merged into file info?
             d['background'].append(bkgd[self.experimental_column-1])
             d['filename'].append(file['full_name'])
+            d['date'].append(file['date'])
             d['condition'].append(file['condition'])
             trace = self.load_trace(self.path+file['full_name'])
             avg_min = self.min_edges_trace(trace, 4) - bkgd[self.experimental_column-1]
