@@ -36,8 +36,9 @@ class SgFinder:
         
         def t(threshold_value):
             t_img = self.image[self.haloTag_channel] > threshold_value
-            fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(t_img)
+            fig, ax = plt.subplots(ncols=2,figsize=(10, 10))
+            ax[0].imshow(self.image[self.haloTag_channel])
+            ax[1].imshow(t_img)
             #plt.imshow(t_img)
             plt.show()
             labeled_sg, count = ndi.label(self.image[self.haloTag_channel]>threshold_value)
